@@ -12,3 +12,18 @@ semantic_classes:
     coco_names: [person]
   luggage:
     coco_names: [backpack, handbag, suitcase]
+tracker:
+  backend: bytetrack
+  max_lost_frames: 30
+  use_embeddings: false
+  use_cmc: false
+ownership:
+  association_max_distance_ratio: 0.18
+  association_seconds: 0.5
+  ambiguous_owner_margin_ratio: 0.025
+  separation_distance_ratio: 0.24
+alert:
+  separation_seconds: 2.0
+  stationary_window_seconds: 1.0
+  stationary_max_movement_ratio: 0.02
+  min_stationary_observations: 3

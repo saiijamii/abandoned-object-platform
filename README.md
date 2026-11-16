@@ -2,6 +2,8 @@
 
 Phase One prototype: normalize person/luggage detection, measure quality, and prepare annotated video output.
 
+Phase Two adds optional BoxMOT tracking, temporal owner association, source-time separation events, evidence snapshots, and read-only event/track APIs.
+
 ## Backend
 
 ```powershell
@@ -17,6 +19,13 @@ Optional model adapters:
 .venv\Scripts\pip install -r backend\requirements-optional.txt
 ```
 
+Phase Two tracker:
+
+```powershell
+.venv\Scripts\pip install -r backend\requirements-phase2.txt
+python scripts\run_synthetic_demo.py
+```
+
 ## Frontend
 
 ```powershell
@@ -25,4 +34,4 @@ npm install
 npm run dev
 ```
 
-Research and visual references remain outside this checkout. Phase Two stays out of scope until detector recall passes the project gate.
+Research and visual references remain outside this checkout. Phase Two accepts no event when detector emits no luggage track.
