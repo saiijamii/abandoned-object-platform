@@ -1,0 +1,14 @@
+detector:
+  backend: yolo
+  confidence: 0.15
+  image_size: 640
+  device: cpu
+  yolo:
+    weights: yolov8n.pt
+  rfdetr:
+    model: nano
+semantic_classes:
+  person:
+    coco_names: [person]
+  luggage:
+    coco_names: [backpack, handbag, suitcase]

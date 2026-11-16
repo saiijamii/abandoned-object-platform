@@ -1,0 +1,25 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@500&family=Geist:wght@400;500;600&display=swap');
+:root { font-family: Geist, Arial, sans-serif; color: #171717; background: #fafafa; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1200px; margin: auto; padding: 0 24px 96px; }
+nav { height: 64px; border-bottom: 1px solid #ebebeb; display: flex; align-items: center; gap: 24px; }
+.brand { font-weight: 600; font-size: 20px; letter-spacing: -1px; }
+.mono, .eyebrow { font: 500 12px/16px 'Geist Mono', monospace; letter-spacing: 0; }
+.mono { color: #8f8f8f; }
+nav button { margin-left: auto; }
+button { border: 1px solid #ebebeb; border-radius: 6px; background: #fff; color: #171717; padding: 8px 12px; font: 500 14px/20px Geist, Arial; cursor: pointer; }
+.primary { border: 0; border-radius: 100px; background: #171717; color: white; padding: 12px 16px; }
+.hero { position: relative; overflow: hidden; padding: 128px 0 96px; }
+.hero::after { content: ''; position: absolute; width: 560px; height: 300px; right: 0; top: 70px; z-index: -1; filter: blur(55px); opacity: .28; background: radial-gradient(circle at 20% 45%, #50e3c2, transparent 32%), radial-gradient(circle at 55% 30%, #007cf0, transparent 35%), radial-gradient(circle at 80% 55%, #ff0080, transparent 34%), radial-gradient(circle at 60% 85%, #f9cb28, transparent 30%); }
+h1 { max-width: 700px; margin: 16px 0 24px; font-size: clamp(42px, 7vw, 72px); line-height: .98; letter-spacing: -3.6px; font-weight: 600; }
+.eyebrow { color: #8f8f8f; }
+.lead { max-width: 520px; color: #4d4d4d; font-size: 18px; line-height: 28px; margin-bottom: 32px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+article, .panel { border: 1px solid #ebebeb; border-radius: 12px; background: #fff; padding: 24px; }
+article { display: grid; gap: 8px; }
+article strong { font-size: 24px; font-weight: 600; letter-spacing: -1px; }
+article span, .panel p { color: #4d4d4d; font-size: 14px; line-height: 20px; }
+.panel { margin-top: 12px; display: flex; justify-content: space-between; align-items: end; }
+h2 { margin: 8px 0; font-size: 24px; letter-spacing: -.8px; }
+@media (max-width: 640px) { main { padding: 0 16px 64px; } .hero { padding: 80px 0 64px; } .grid { grid-template-columns: 1fr; } .panel { display: block; } .panel button { margin-top: 16px; } }
