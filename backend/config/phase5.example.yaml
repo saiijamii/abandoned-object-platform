@@ -1,0 +1,56 @@
+runtime:
+  inference_workers: 1
+  storage_root: storage
+
+detector:
+  backend: yolo
+  confidence: 0.15
+  image_size: 640
+  device: cpu
+  yolo:
+    weights: yolov8n.pt
+  rfdetr:
+    model: nano
+
+tracker:
+  backend: bytetrack
+  max_lost_frames: 30
+
+ownership:
+  association_seconds: 0.5
+  association_max_distance_ratio: 0.20
+  separation_distance_ratio: 0.24
+  ambiguous_owner_margin_ratio: 0.025
+
+alert:
+  separation_seconds: 2.0
+  stationary_window_seconds: 1.0
+  stationary_max_movement_ratio: 0.035
+  min_stationary_observations: 3
+
+cameras:
+  - id: demo_fake
+    enabled: true
+    source:
+      kind: fake
+    sampling:
+      queue_size: 3
+      process_every_n_frames: 1
+      drop_policy: drop_oldest
+
+  - id: sample_mp4
+    enabled: false
+    source:
+      kind: mp4
+      uri: data/videos/sample.mp4
+
+  - id: gate_camera
+    enabled: false
+    source:
+      kind: rtsp
+      secret_env: CAMERA_GATE_RTSP_URL
+    reconnect:
+      initial_seconds: 1.0
+      maximum_seconds: 30.0
+      multiplier: 2.0
+      jitter_seconds: 0.25

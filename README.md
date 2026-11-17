@@ -6,6 +6,8 @@ Phase Two adds optional BoxMOT tracking, temporal owner association, source-time
 
 Phase Three connects detector, tracker, ownership, event, and evidence paths against a real MP4.
 
+Phase Five connects that CV path to camera workers, session history, configuration APIs, and operator event views.
+
 ## Backend
 
 ```powershell
@@ -42,6 +44,16 @@ python scripts\run_phase3.py `
 ```
 
 Detection frame rate is not recall. Evaluate annotated CSV boxes with `scripts\evaluate_recall.py`.
+
+Phase Five runtime:
+
+```powershell
+$env:PYTHONPATH = ".\backend"
+$env:PHASE4_CONFIG = ".\backend\config\phase5.example.yaml"
+python -m uvicorn app.runtime.main:app --app-dir backend --reload
+```
+
+Use `GET /api/cameras`, `GET /api/events`, `GET /api/config`, and `GET /api/tracks/{camera_id}/{session_id}`.
 
 ## Frontend
 

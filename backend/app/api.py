@@ -5,11 +5,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 
 from .runtime.config import redact_uri
-from .runtime.processor import passthrough_factory
 from .runtime.worker import CameraManager
 
 
-def create_app(storage_root: str | Path = "storage", manager: CameraManager | None = None, camera_configs: list | None = None) -> FastAPI:
+def create_app(storage_root: str | Path = "storage", manager: CameraManager | None = None, camera_configs: list | None = None, config_path: str | Path | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app):
         if manager:
@@ -55,6 +54,42 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
     @app.get("/api/v1/tracks")
     def tracks() -> list[dict]:
         return _collection(root, "tracks")
+
+    @app.get("/api/config")
+    def config() -> dict:
+        if not config_path or not Path(config_path).is_file():
+            return {}
+        import yaml
+        value = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
+        for camera in value.get("cameras", []):
+            source = camera.get("source", {})
+            if source.get("secret_env"):
+                source.pop("uri", None)
+        return value
+
+    @app.put("/api/config")
+    def update_config(value: dict) -> dict:
+        if not config_path:
+            raise HTTPException(status_code=503, detail="config file is not configured")
+        import yaml
+        path = Path(config_path)
+        current = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for key in ("runtime", "ownership", "alerts", "alert"):
+            if key in value:
+                current[key] = value[key]
+        for camera in value.get("cameras", []):
+            source = camera.get("source", {})
+            if source.get("uri") or source.get("password"):
+                raise HTTPException(status_code=400, detail="source secrets must use secret_env")
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(yaml.safe_dump(current, sort_keys=False), encoding="utf-8")
+        temporary.replace(path)
+        return current
+
+    @app.get("/api/tracks/{camera_id}/{session_id}")
+    def camera_tracks(camera_id: str, session_id: str) -> dict:
+        base = root / "cameras" / camera_id / "sessions" / session_id
+        return {"tracks": _jsonl(base / "tracks.jsonl"), "associations": _jsonl(base / "associations.jsonl")}
 
     @app.get("/api/health")
     def runtime_health() -> dict:
@@ -118,8 +153,12 @@ app = create_app()
 
 
 def _collection(root: Path, name: str) -> list[dict]:
-    directory = root / name
+    directory = root / "cameras" if name == "events" else root / name
     if not directory.exists():
         return []
     paths = directory.rglob("metadata.json") if name == "events" else directory.rglob("*.json")
     return [json.loads(path.read_text(encoding="utf-8")) for path in sorted(paths)]
+
+
+def _jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()] if path.is_file() else []
