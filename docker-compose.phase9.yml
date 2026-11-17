@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: abandoned_luggage
+    ports:
+      - "5432:5432"
+    volumes:
+      - phase9-postgres:/var/lib/postgresql/data
+
+volumes:
+  phase9-postgres:

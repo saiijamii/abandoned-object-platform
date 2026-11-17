@@ -11,6 +11,11 @@ from .runtime.worker import CameraManager
 def create_app(storage_root: str | Path = "storage", manager: CameraManager | None = None, camera_configs: list | None = None, config_path: str | Path | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app):
+        try:
+            from .phase9.persistence import recover_running_sessions
+            recover_running_sessions()
+        except Exception:
+            pass
         if manager:
             manager.start()
         try:
@@ -25,6 +30,11 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
         from .search.routes import router as search_router
         app.include_router(search_router)
     except (ImportError, RuntimeError):
+        pass
+    try:
+        from .phase9.routes import router as phase9_router
+        app.include_router(phase9_router)
+    except ImportError:
         pass
 
     @app.get("/api/v1/health")

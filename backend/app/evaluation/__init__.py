@@ -1,5 +1,5 @@
 from .dataset import split_manifest
 from .event_trace import validate_trace
-from .metrics import precision_recall, summarize_slices
+from .metrics import iou, precision_recall, score_frame, summarize_slices
 
-__all__ = ["precision_recall", "split_manifest", "summarize_slices", "validate_trace"]
+__all__ = ["iou", "precision_recall", "score_frame", "split_manifest", "summarize_slices", "validate_trace"]
