@@ -1,19 +1,17 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles.css";
 
-const metrics = [
-  ["Detector", "YOLO / RF-DETR ready", "configurable backend"],
-  ["Luggage recall", "—", "awaiting annotations"],
-  ["Processing FPS", "—", "CPU benchmark pending"],
-];
-
 function App() {
+  const [cameras, setCameras] = useState([]);
+  const [error, setError] = useState("");
+  useEffect(() => { fetch("/api/cameras").then((response) => response.json()).then(setCameras).catch(() => setError("Backend unavailable")); }, []);
   return <main>
-    <nav><span className="brand">AVP</span><span className="mono">PHASE_01 / OPERATIONS</span><button>Settings</button></nav>
-    <section className="hero"><p className="eyebrow">ABANDONED-OBJECT PLATFORM</p><h1>See luggage clearly.<br />Measure before alerting.</h1><p className="lead">Detector quality dashboard for CCTV evaluation. Tracking starts only after reliable detections.</p><button className="primary">Open evaluation</button></section>
-    <section className="grid">{metrics.map(([label, value, detail]) => <article key={label}><p className="eyebrow">{label}</p><strong>{value}</strong><span>{detail}</span></article>)}</section>
-    <section className="panel"><div><p className="eyebrow">RECENT RUNS</p><h2>No runs yet</h2><p>Run detector evaluation to see annotated video, precision, recall, and latency.</p></div><button className="secondary">View schema</button></section>
+    <nav><span className="brand">AVP</span><span className="mono">PHASE_04 / OPERATIONS</span><button>Settings</button></nav>
+    <section className="hero"><p className="eyebrow">ABANDONED-OBJECT PLATFORM</p><h1>Camera runtime.<br />Operator clarity.</h1><p className="lead">Multi-camera health, bounded frame processing, and evidence events in one view.</p><button className="primary">Refresh status</button></section>
+    {error && <section className="alert">{error}</section>}
+    <section className="grid"><article><p className="eyebrow">CAMERAS</p><strong>{cameras.length}</strong><span>configured sources</span></article><article><p className="eyebrow">RUNTIME</p><strong>{cameras.length ? "READY" : "—"}</strong><span>manager status</span></article><article><p className="eyebrow">SEARCH</p><strong>RESERVED</strong><span>future capability</span></article></section>
+    <section className="panel"><div><p className="eyebrow">CAMERA REGISTRY</p><h2>{cameras.length ? "Configured cameras" : "No cameras configured"}</h2>{cameras.map((camera) => <p className="camera" key={camera.id}><b>{camera.id}</b><span>{camera.source_kind} · {camera.enabled ? "enabled" : "disabled"}</span></p>)}</div><button className="secondary">View API</button></section>
   </main>;
 }
 

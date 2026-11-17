@@ -1,0 +1,41 @@
+runtime:
+  inference_workers: 1
+  storage_root: storage
+
+cameras:
+  - id: demo_fake
+    enabled: true
+    source:
+      kind: fake
+    sampling:
+      queue_size: 3
+      process_every_n_frames: 1
+      target_fps: null
+      drop_policy: drop_oldest
+
+  - id: lobby_mp4
+    enabled: false
+    source:
+      kind: mp4
+      uri: data/videos/sample.mp4
+    sampling:
+      queue_size: 4
+      process_every_n_frames: 1
+      target_fps: null
+      drop_policy: drop_oldest
+
+  - id: gate_camera
+    enabled: false
+    source:
+      kind: rtsp
+      secret_env: CAMERA_GATE_RTSP_URL
+    sampling:
+      queue_size: 3
+      process_every_n_frames: 2
+      target_fps: 5
+      drop_policy: drop_oldest
+    reconnect:
+      initial_seconds: 1.0
+      maximum_seconds: 30.0
+      multiplier: 2.0
+      jitter_seconds: 0.25
