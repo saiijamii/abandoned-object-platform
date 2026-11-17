@@ -1,0 +1,18 @@
+visual_search:
+  enabled: false
+  backend: sqlite_exact
+  db_path: storage/search/search.sqlite3
+  embedding:
+    provider: clip
+    model: openai/clip-vit-base-patch32
+    device: cpu
+  query:
+    default_top_k: 20
+    max_top_k: 100
+  upload:
+    max_bytes: 8388608
+    allowed_types: [image/jpeg, image/png, image/webp]
+  privacy:
+    candidate_matches_only: true
+    retention_days: 30
+    audit_queries: true

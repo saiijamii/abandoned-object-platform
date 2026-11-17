@@ -1,0 +1,5 @@
+python-multipart>=0.0.9,<1
+Pillow>=10,<12
+# Optional real embedding backend:
+# torch
+# transformers>=4.40,<5

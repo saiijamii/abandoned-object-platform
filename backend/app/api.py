@@ -21,6 +21,11 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
 
     app = FastAPI(title="Abandoned Object Platform", version="0.1.0", lifespan=lifespan)
     root = Path(storage_root)
+    try:
+        from .search.routes import router as search_router
+        app.include_router(search_router)
+    except (ImportError, RuntimeError):
+        pass
 
     @app.get("/api/v1/health")
     def health() -> dict[str, str]:

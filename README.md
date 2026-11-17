@@ -8,6 +8,8 @@ Phase Three connects detector, tracker, ownership, event, and evidence paths aga
 
 Phase Five connects that CV path to camera workers, session history, configuration APIs, and operator event views.
 
+Phase Six adds backend-only person and bag visual search with SQLite exact cosine matching.
+
 ## Backend
 
 ```powershell
@@ -54,6 +56,8 @@ python -m uvicorn app.runtime.main:app --app-dir backend --reload
 ```
 
 Use `GET /api/cameras`, `GET /api/events`, `GET /api/config`, and `GET /api/tracks/{camera_id}/{session_id}`.
+
+Index event crops with `python backend\scripts\index_phase6.py --storage-root storage`. Set `SEARCH_EMBEDDER=clip` only after installing optional Torch/Transformers dependencies.
 
 ## Frontend
 
