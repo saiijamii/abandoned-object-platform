@@ -49,6 +49,10 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
     def events() -> list[dict]:
         return _collection(root, "events")
 
+    @app.get("/api/events")
+    def runtime_events() -> list[dict]:
+        return events()
+
     @app.get("/api/v1/events/{event_id}")
     def event(event_id: str) -> dict:
         value = next((item for item in _collection(root, "events") if item.get("event_id") == event_id), None)
@@ -104,7 +108,7 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
     def cameras() -> list[dict]:
         values = []
         for camera in camera_configs or []:
-            values.append({"id": camera.id, "enabled": camera.enabled, "source_kind": camera.source_kind, "source_uri": redact_uri(camera.source_uri) if not camera.secret_env else None})
+            values.append({"id": camera.id, "enabled": camera.enabled, "source_kind": camera.source_kind, "secret_env": camera.secret_env, "source_uri": redact_uri(camera.source_uri) if not camera.secret_env else None})
         return values
 
     @app.get("/api/cameras/{camera_id}/health")
@@ -115,6 +119,39 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
             return manager.health(camera_id)
         except KeyError:
             raise HTTPException(status_code=404, detail="camera not found")
+
+    @app.get("/api/phase8/cameras")
+    def phase8_cameras() -> list[dict]:
+        if not manager:
+            return []
+        return manager.health()
+
+    @app.put("/api/phase8/cameras/{camera_id}")
+    def update_phase8_camera(camera_id: str, value: dict) -> dict:
+        if not manager or not hasattr(manager, "update_camera"):
+            raise HTTPException(status_code=503, detail="phase 8 manager is not configured")
+        if any(key in value for key in ("source", "uri", "password", "secret_env")):
+            raise HTTPException(status_code=400, detail="source secrets cannot be changed through this API")
+        try:
+            return manager.update_camera(camera_id, value)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="camera not found")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.delete("/api/phase8/cameras/{camera_id}")
+    def delete_phase8_camera(camera_id: str) -> dict[str, str]:
+        if not manager or not hasattr(manager, "remove_camera"):
+            raise HTTPException(status_code=503, detail="phase 8 manager is not configured")
+        try:
+            manager.remove_camera(camera_id)
+        except KeyError:
+            raise HTTPException(status_code=404, detail="camera not found")
+        return {"camera_id": camera_id, "status": "removed"}
+
+    @app.get("/api/phase8/metrics")
+    def phase8_metrics() -> dict:
+        return manager.metrics() if manager and hasattr(manager, "metrics") else {}
 
     def camera_action(camera_id: str, action: str) -> dict:
         if not manager:
@@ -149,6 +186,9 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
             lines.append(f'camera_frames_read{{camera_id="{label}"}} {item["frames_read"]}')
             lines.append(f'camera_frames_processed{{camera_id="{label}"}} {item["frames_processed"]}')
             lines.append(f'camera_frames_dropped{{camera_id="{label}"}} {item["frames_dropped"]}')
+            lines.append(f'camera_queue_depth{{camera_id="{label}"}} {item.get("queue_depth", 0)}')
+            lines.append(f'camera_decoded_fps{{camera_id="{label}"}} {item.get("decoded_fps", 0)}')
+            lines.append(f'camera_processed_fps{{camera_id="{label}"}} {item.get("processed_fps", 0)}')
         return "\n".join(lines) + "\n"
 
     return app

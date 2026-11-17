@@ -16,6 +16,7 @@ class CandidateEvent:
     separation_seconds: float
     bag_stationary: bool
     dedup_key: str
+    separation_episode_start_media_ts: float | None = None
 
 
 class SeparationEventMachine:
@@ -59,4 +60,5 @@ class SeparationEventMachine:
             separation_seconds=separation_seconds,
             bag_stationary=True,
             dedup_key=dedup_key,
+            separation_episode_start_media_ts=association.separated_since_s,
         )

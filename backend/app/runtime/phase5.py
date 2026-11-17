@@ -21,13 +21,14 @@ def _draw(frame, tracks):
 
 
 class Phase5Processor:
-    def __init__(self, camera, config: dict, storage_root: str = "storage") -> None:
+    def __init__(self, camera, config: dict, storage_root: str = "storage", event_ledger=None) -> None:
         self.camera, self.config = camera, config
         self.detector = create_detector(config)
         self.tracker = create_tracker(camera.id, "pending", config)
         self.processor = PhaseTwoProcessor.create(camera.id, "pending", config)
         self.history = JsonlHistory(storage_root)
         self.recorder = EvidenceRecorder(Path(storage_root) / "cameras")
+        self.event_ledger = event_ledger
         self.tracks = {}
 
     def __call__(self, packet):
@@ -55,7 +56,7 @@ class Phase5Processor:
             association = self.processor.association.associations.get(bag.track_id)
             if association:
                 self.history.append(packet.camera_id, packet.session_id, "associations.jsonl", {"bag_track_id": bag.track_id, "owner_track_id": association.owner_track_id, "state": association.state.value, "timestamp_s": packet.timestamp_s, "episode": association.episode})
-            if event:
+            if event and (self.event_ledger is None or self.event_ledger.claim_event(event)):
                 owner = next((person for person in people if person.track_id == event.owner_track_id), None)
                 events.append(self.recorder.record(event, raw, annotated, bag, owner))
         return [{"detector_ms": detector_ms, "tracker_ms": tracker_ms, "events": events}]
@@ -69,14 +70,16 @@ class Phase5Processor:
 
 
 class DeferredPhase5Processor:
-    def __init__(self, camera, config: dict, storage_root: str) -> None:
-        self.camera, self.config, self.storage_root, self.delegate = camera, config, storage_root, None
+    def __init__(self, camera, config: dict, storage_root: str, event_ledger=None) -> None:
+        self.camera, self.config, self.storage_root, self.event_ledger, self.delegate = camera, config, storage_root, event_ledger, None
 
     def __call__(self, packet):
         if self.delegate is None:
-            self.delegate = PassthroughProcessor() if self.camera.source_kind == "fake" else Phase5Processor(self.camera, self.config, self.storage_root)
+            self.delegate = PassthroughProcessor() if self.camera.source_kind == "fake" else Phase5Processor(self.camera, self.config, self.storage_root, self.event_ledger)
         return self.delegate(packet)
 
 
 def phase5_factory(config: dict, storage_root: str):
-    return lambda camera: DeferredPhase5Processor(camera, config, storage_root)
+    from .phase8 import PersistentEventLedger
+    ledger = PersistentEventLedger(Path(storage_root) / "phase8" / "event_dedupe.jsonl")
+    return lambda camera: DeferredPhase5Processor(camera, config, storage_root, ledger)

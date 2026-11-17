@@ -18,6 +18,7 @@ class ReconnectConfig:
     maximum_seconds: float = 30.0
     multiplier: float = 2.0
     jitter_seconds: float = 0.25
+    jitter_fraction: float = 0.20
 
 
 @dataclass(frozen=True)
