@@ -1,0 +1,4 @@
+-r requirements-phase3.txt
+# Optional training dependencies:
+# ultralytics
+# rfdetr[train]

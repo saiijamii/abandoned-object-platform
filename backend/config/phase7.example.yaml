@@ -1,0 +1,16 @@
+dataset:
+  classes: [person, bag]
+  train_fraction: 0.70
+  valid_fraction: 0.15
+  test_fraction: 0.15
+  seed: 42
+targets:
+  status: proposed_not_measured
+  person_recall_min: 0.90
+  bag_recall_min: 0.90
+  green_duffel_recall_min: 0.95
+  bag_precision_min: 0.85
+  false_abandonment_events_per_camera_hour_max: 0.10
+event_validation:
+  separation_seconds: 2.0
+  stationary_required: true

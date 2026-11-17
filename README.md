@@ -10,6 +10,8 @@ Phase Five connects that CV path to camera workers, session history, configurati
 
 Phase Six adds backend-only person and bag visual search with SQLite exact cosine matching.
 
+Phase Seven adds leakage-safe detector dataset preparation, training hooks, held-out evaluation, error review, and event-trace validation.
+
 ## Backend
 
 ```powershell
