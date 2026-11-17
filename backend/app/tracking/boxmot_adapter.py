@@ -19,10 +19,13 @@ class BoxMOTTracker:
         if config.backend not in {"bytetrack", "botsort"}:
             raise ValueError("tracker backend must be bytetrack or botsort")
         try:
-            from boxmot import BYTETracker, BotSort
+            from boxmot import BotSort, ByteTrack
         except ImportError as exc:
-            raise RuntimeError("Install tracker dependencies with pip install -r backend/requirements-phase2.txt") from exc
-        tracker_type = BYTETracker if config.backend == "bytetrack" else BotSort
+            try:
+                from boxmot import BotSort, BYTETracker as ByteTrack
+            except ImportError:
+                raise RuntimeError("Install tracker dependencies with pip install -r backend/requirements-phase2.txt") from exc
+        tracker_type = ByteTrack if config.backend == "bytetrack" else BotSort
         self.tracker = tracker_type()
         self.camera_id = camera_id
         self.session_id = session_id
@@ -33,8 +36,11 @@ class BoxMOTTracker:
         # narrow; callers only receive session-scoped Track values.
         import numpy as np
 
-        rows = np.array([[*d["bbox"], d["confidence"], d.get("class_id", 0)] for d in detections], dtype=float)
-        raw = self.tracker.update(rows, frame)
+        rows = np.asarray([[*d["bbox"], d["confidence"], d.get("class_id", 0)] for d in detections], dtype=float).reshape((-1, 6))
+        try:
+            raw = self.tracker.update(rows, frame, timestamp_s=timestamp_s)
+        except TypeError:
+            raw = self.tracker.update(rows, frame)
         tracks: list[Track] = []
         for row in raw:
             x1, y1, x2, y2, track_id, class_id = row[:6]

@@ -1,0 +1,4 @@
+-r requirements.txt
+-r requirements-phase2.txt
+-r requirements-optional.txt
+numpy>=1.26,<3
