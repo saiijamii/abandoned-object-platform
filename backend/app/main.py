@@ -1,3 +1,3 @@
-from .api import app
+from .runtime.main import app
 
 __all__ = ["app"]

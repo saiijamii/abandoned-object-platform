@@ -235,6 +235,7 @@ class Phase8CameraWorker:
 
 class Phase8CameraManager:
     def __init__(self, cameras: list[CameraConfig], processor_factory: Callable[[CameraConfig], Callable[[FramePacket], Any]], storage_root: str | Path = "storage", runtime: dict[str, Any] | None = None) -> None:
+        self._processor_factory = processor_factory
         self.workers = {camera.id: Phase8CameraWorker(camera) for camera in cameras}
         self.processors = {camera.id: processor_factory(camera) for camera in cameras}
         self._order = list(self.workers)
@@ -242,14 +243,17 @@ class Phase8CameraManager:
         self._timestamp_guard = TimestampGuard()
         self._stop = threading.Event()
         self._scheduler: threading.Thread | None = None
+        self._registry_lock = threading.RLock()
+        self._running = False
         self._max_gap = float((runtime or {}).get("max_continuity_gap_seconds", .75))
         self._last_processed: dict[str, float] = {}
         self._processed_times: dict[str, deque[float]] = {camera.id: deque() for camera in cameras}
         self._decoded_times: dict[str, deque[float]] = {camera.id: deque() for camera in cameras}
 
     def start(self) -> None:
+        self._running = True
         self._stop.clear()
-        for worker in self.workers.values():
+        for worker in list(self.workers.values()):
             if worker.config.enabled:
                 worker.start()
         if not self._scheduler or not self._scheduler.is_alive():
@@ -257,8 +261,9 @@ class Phase8CameraManager:
             self._scheduler.start()
 
     def stop(self) -> None:
+        self._running = False
         self._stop.set()
-        for worker in self.workers.values():
+        for worker in list(self.workers.values()):
             worker.stop()
         if self._scheduler:
             self._scheduler.join(timeout=2)
@@ -286,6 +291,40 @@ class Phase8CameraManager:
     def metrics(self) -> dict[str, Any]:
         return {item["camera_id"]: item for item in self.health()}
 
+    def camera_configs(self) -> list[CameraConfig]:
+        with self._registry_lock:
+            return [self.workers[camera_id].config for camera_id in self._order]
+
+    def add_camera(self, camera: CameraConfig) -> dict[str, Any]:
+        with self._registry_lock:
+            if camera.id in self.workers:
+                raise ValueError("camera already exists")
+            worker = Phase8CameraWorker(camera)
+            self.workers[camera.id] = worker
+            self.processors[camera.id] = self._processor_factory(camera)
+            self._order.append(camera.id)
+            self._processed_times[camera.id] = deque()
+            self._decoded_times[camera.id] = deque()
+            if self._running and camera.enabled:
+                worker.start()
+            return worker.health.as_dict()
+
+    def replace_camera(self, camera_id: str, camera: CameraConfig) -> dict[str, Any]:
+        if camera.id != camera_id:
+            raise ValueError("camera id cannot be changed")
+        with self._registry_lock:
+            old = self._get(camera_id)
+            old.stop()
+            worker = Phase8CameraWorker(camera)
+            self.workers[camera_id] = worker
+            self.processors[camera_id] = self._processor_factory(camera)
+            self._processed_times[camera_id].clear()
+            self._decoded_times[camera_id].clear()
+            self._last_processed.pop(camera_id, None)
+            if self._running and camera.enabled:
+                worker.start()
+            return worker.health.as_dict()
+
     def update_camera(self, camera_id: str, values: dict[str, Any]) -> dict[str, Any]:
         worker = self._get(camera_id)
         if "enabled" in values:
@@ -311,11 +350,16 @@ class Phase8CameraManager:
         return worker.health.as_dict()
 
     def remove_camera(self, camera_id: str) -> None:
-        worker = self._get(camera_id)
-        worker.stop()
-        self.workers.pop(camera_id)
-        self.processors.pop(camera_id, None)
-        self._order = [item for item in self._order if item != camera_id]
+        with self._registry_lock:
+            worker = self._get(camera_id)
+            worker.stop()
+            self.workers.pop(camera_id)
+            self.processors.pop(camera_id, None)
+            self._order = [item for item in self._order if item != camera_id]
+            self._processed_times.pop(camera_id, None)
+            self._decoded_times.pop(camera_id, None)
+            self._last_processed.pop(camera_id, None)
+            self._cursor = 0
 
     def _health(self, worker: Phase8CameraWorker) -> dict[str, Any]:
         now = time.monotonic()
@@ -332,12 +376,18 @@ class Phase8CameraManager:
     def _schedule_loop(self) -> None:
         while not self._stop.is_set():
             processed = False
-            for _ in self._order:
-                if not self._order:
+            with self._registry_lock:
+                camera_ids = list(self._order)
+            for _ in camera_ids:
+                with self._registry_lock:
+                    if not self._order:
+                        break
+                    camera_id = self._order[self._cursor % len(self._order)]
+                    self._cursor = (self._cursor + 1) % len(self._order)
+                    worker = self.workers.get(camera_id)
+                    processor = self.processors.get(camera_id)
+                if worker is None or processor is None:
                     break
-                camera_id = self._order[self._cursor % len(self._order)]
-                self._cursor = (self._cursor + 1) % len(self._order)
-                worker = self.workers[camera_id]
                 try:
                     packet = worker.queue.get_nowait()
                 except queue.Empty:
@@ -356,7 +406,7 @@ class Phase8CameraManager:
                     worker.health.reconnect_epoch += 1
                 started = time.perf_counter()
                 try:
-                    self.processors[camera_id](packet)
+                    processor(packet)
                     worker.health.frames_processed += 1
                     worker.health.last_media_timestamp = packet.timestamp_s
                     self._processed_times[camera_id].append(time.monotonic())

@@ -1,11 +1,14 @@
 from pathlib import Path
 import json
 import copy
+import re
 from contextlib import asynccontextmanager
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException
 
-from .runtime.config import redact_uri
+from .runtime.config import CameraConfig, camera_from_dict, camera_to_dict, redact_uri, write_runtime_cameras
+from .runtime.sources import test_source
 from .runtime.worker import CameraManager
 
 
@@ -130,10 +133,50 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
 
     @app.get("/api/cameras")
     def cameras() -> list[dict]:
-        values = []
-        for camera in camera_configs or []:
-            values.append({"id": camera.id, "enabled": camera.enabled, "source_kind": camera.source_kind, "secret_env": camera.secret_env, "source_uri": redact_uri(camera.source_uri) if not camera.secret_env else None})
-        return values
+        configs = manager.camera_configs() if manager and hasattr(manager, "camera_configs") else camera_configs or []
+        return [_public_camera(camera, manager) for camera in configs]
+
+    @app.post("/api/cameras", status_code=201)
+    def create_camera(value: dict) -> dict:
+        _require_camera_registry(manager, config_path)
+        camera = _camera_payload(value)
+        try:
+            result = manager.add_camera(camera)
+            write_runtime_cameras(config_path, manager.camera_configs())
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
+        return {**_public_camera(camera, manager), "health": result}
+
+    @app.post("/api/cameras/test")
+    def test_camera(value: dict) -> dict:
+        camera = _camera_payload(value)
+        try:
+            return test_source(camera)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    @app.put("/api/cameras/{camera_id}")
+    def replace_camera(camera_id: str, value: dict) -> dict:
+        _require_camera_registry(manager, config_path)
+        camera = _camera_payload({**value, "id": camera_id})
+        try:
+            result = manager.replace_camera(camera_id, camera)
+            write_runtime_cameras(config_path, manager.camera_configs())
+        except KeyError:
+            raise HTTPException(status_code=404, detail="camera not found")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        return {**_public_camera(camera, manager), "health": result}
+
+    @app.delete("/api/cameras/{camera_id}")
+    def delete_camera(camera_id: str) -> dict[str, str]:
+        _require_camera_registry(manager, config_path)
+        try:
+            manager.remove_camera(camera_id)
+            write_runtime_cameras(config_path, manager.camera_configs())
+        except KeyError:
+            raise HTTPException(status_code=404, detail="camera not found")
+        return {"camera_id": camera_id, "status": "removed"}
 
     @app.get("/api/cameras/{camera_id}/health")
     def camera_health(camera_id: str) -> dict:
@@ -197,6 +240,10 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
     def restart_camera(camera_id: str) -> dict:
         return camera_action(camera_id, "restart")
 
+    @app.post("/api/cameras/{camera_id}/reconnect")
+    def reconnect_camera(camera_id: str) -> dict:
+        return camera_action(camera_id, "restart")
+
     @app.get("/api/search/capabilities")
     def search_capabilities() -> dict:
         return {"person": False, "luggage": False, "status": "reserved"}
@@ -230,10 +277,12 @@ def _validate_settings(section: str, value: dict) -> None:
     for key in numeric:
         if key in value:
             try:
-                if float(value[key]) < 0:
+                number = float(value[key])
+                if number < 0:
                     raise ValueError
             except (TypeError, ValueError):
                 raise HTTPException(status_code=400, detail=f"{section}.{key} must be non-negative")
+            value[key] = int(number) if key == "min_stationary_observations" else number
 
 
 def _validate_camera_settings(camera: dict) -> None:
@@ -261,6 +310,65 @@ def _public_config(value: dict) -> dict:
         elif source.get("uri"):
             source["uri"] = redact_uri(source["uri"])
     return public
+
+
+def _require_camera_registry(manager, config_path) -> None:
+    if not manager or not hasattr(manager, "camera_configs") or not config_path:
+        raise HTTPException(status_code=503, detail="camera registry is not configured")
+
+
+def _camera_payload(value: dict) -> CameraConfig:
+    camera_id = str(value.get("id", "")).strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", camera_id):
+        raise HTTPException(status_code=400, detail="camera id must use letters, numbers, underscore, or hyphen")
+    source = value.get("source", {})
+    if not isinstance(source, dict):
+        raise HTTPException(status_code=400, detail="camera source must be an object")
+    kind = str(source.get("kind", "")).lower()
+    if kind not in {"fake", "mp4", "rtsp", "http"}:
+        raise HTTPException(status_code=400, detail="unsupported camera source kind")
+    uri = source.get("uri")
+    secret_env = source.get("secret_env")
+    if uri and secret_env:
+        raise HTTPException(status_code=400, detail="source must use either uri or secret_env")
+    if uri and _has_url_credentials(str(uri)):
+        raise HTTPException(status_code=400, detail="source credentials must use secret_env")
+    if kind == "mp4" and not uri:
+        raise HTTPException(status_code=400, detail="MP4 source requires a local path")
+    if kind == "mp4" and secret_env:
+        raise HTTPException(status_code=400, detail="MP4 source cannot use secret_env")
+    if kind in {"rtsp", "http"} and not uri and not secret_env:
+        raise HTTPException(status_code=400, detail=f"{kind.upper()} source requires uri or secret_env")
+    if secret_env and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", str(secret_env)):
+        raise HTTPException(status_code=400, detail="secret_env is invalid")
+    _validate_camera_settings(value)
+    try:
+        return camera_from_dict({**value, "id": camera_id, "source": {**source, "kind": kind}})
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"invalid camera configuration: {exc}")
+
+
+def _has_url_credentials(uri: str) -> bool:
+    try:
+        parsed = urlsplit(uri)
+        return bool(parsed.scheme and (parsed.username is not None or parsed.password is not None))
+    except ValueError:
+        return True
+
+
+def _public_camera(camera: CameraConfig, manager=None) -> dict:
+    value = camera_to_dict(camera)
+    source = value["source"]
+    if source.get("secret_env"):
+        source.pop("uri", None)
+    elif source.get("uri"):
+        source["uri"] = redact_uri(source["uri"])
+    if manager:
+        try:
+            value["health"] = manager.health(camera.id)
+        except KeyError:
+            value["health"] = None
+    return value
 
 
 app = create_app()

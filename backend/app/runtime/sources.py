@@ -78,6 +78,14 @@ class RTSPSource(OpenCVSource):
         super().__init__(uri, live=True)
 
 
+class HTTPSource(OpenCVSource):
+    def __init__(self, camera: CameraConfig) -> None:
+        uri = resolve_secret(camera)
+        if not uri:
+            raise RuntimeError(f"missing HTTP source environment variable: {camera.secret_env}")
+        super().__init__(uri, live=True)
+
+
 def create_source(camera: CameraConfig) -> Source:
     if camera.source_kind == "fake":
         return FakeSource(camera.id)
@@ -87,4 +95,20 @@ def create_source(camera: CameraConfig) -> Source:
         return MP4Source(camera.source_uri)
     if camera.source_kind == "rtsp":
         return RTSPSource(camera)
+    if camera.source_kind == "http":
+        return HTTPSource(camera)
     raise ValueError(f"unsupported source kind: {camera.source_kind}")
+
+
+def test_source(camera: CameraConfig) -> dict[str, Any]:
+    source = create_source(camera)
+    started = time.perf_counter()
+    try:
+        source.open()
+        ok, frame, _ = source.read()
+        if not ok:
+            raise RuntimeError("source returned no frame")
+        height, width = frame.shape[:2] if frame is not None and hasattr(frame, "shape") else (None, None)
+        return {"ok": True, "width": width, "height": height, "latency_ms": round((time.perf_counter() - started) * 1000, 3)}
+    finally:
+        source.close()

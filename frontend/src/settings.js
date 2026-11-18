@@ -28,12 +28,10 @@ export function updateCamera(settings, cameraId, key, value) {
 }
 
 export async function loadSettings(fetcher = fetch) {
-  const [configResponse, camerasResponse] = await Promise.all([fetcher("/api/config"), fetcher("/api/phase8/cameras")]);
+  const [configResponse, camerasResponse] = await Promise.all([fetcher("/api/config"), fetcher("/api/cameras")]);
   if (!configResponse.ok || !camerasResponse.ok) throw new Error("Settings unavailable");
   const config = await configResponse.json();
-  const health = await camerasResponse.json();
-  const healthById = Object.fromEntries(health.map((camera) => [camera.camera_id, camera]));
-  return { ...config, cameras: (config.cameras || []).map((camera) => ({ ...camera, health: healthById[camera.id] || null })) };
+  return { ...config, cameras: await camerasResponse.json() };
 }
 
 export async function saveSettings(settings, fetcher = fetch) {
@@ -43,8 +41,41 @@ export async function saveSettings(settings, fetcher = fetch) {
     runtime: settings.runtime,
     ownership: settings.ownership,
     alert: settings.alert,
-    cameras: (settings.cameras || []).map(({ id, enabled, sampling, reconnect }) => ({ id, enabled, sampling, reconnect })),
   }) });
   if (!response.ok) throw new Error("Settings save failed");
   return response.json();
+}
+
+export async function createCamera(camera, fetcher = fetch) {
+  return cameraRequest("/api/cameras", "POST", camera, fetcher);
+}
+
+export async function editCamera(cameraId, camera, fetcher = fetch) {
+  return cameraRequest(`/api/cameras/${encodeURIComponent(cameraId)}`, "PUT", camera, fetcher);
+}
+
+export async function testCamera(camera, fetcher = fetch) {
+  return cameraRequest("/api/cameras/test", "POST", camera, fetcher);
+}
+
+export async function deleteCamera(cameraId, fetcher = fetch) {
+  const response = await fetcher(`/api/cameras/${encodeURIComponent(cameraId)}`, { method: "DELETE" });
+  if (!response.ok) throw new Error(await responseError(response, "Camera delete failed"));
+  return response.json();
+}
+
+export async function cameraAction(cameraId, action, fetcher = fetch) {
+  const response = await fetcher(`/api/cameras/${encodeURIComponent(cameraId)}/${action}`, { method: "POST" });
+  if (!response.ok) throw new Error(await responseError(response, `Camera ${action} failed`));
+  return response.json();
+}
+
+async function cameraRequest(path, method, camera, fetcher) {
+  const response = await fetcher(path, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(camera) });
+  if (!response.ok) throw new Error(await responseError(response, "Camera request failed"));
+  return response.json();
+}
+
+async function responseError(response, fallback) {
+  try { return (await response.json()).detail || fallback; } catch { return fallback; }
 }

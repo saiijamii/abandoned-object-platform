@@ -1,7 +1,6 @@
 runtime:
   inference_workers: 1
   storage_root: storage
-
 detector:
   backend: yolo
   confidence: 0.15
@@ -11,46 +10,33 @@ detector:
     weights: yolov8n.pt
   rfdetr:
     model: nano
-
 tracker:
   backend: bytetrack
   max_lost_frames: 30
-
 ownership:
   association_seconds: 0.5
-  association_max_distance_ratio: 0.20
+  association_max_distance_ratio: 0.2
   separation_distance_ratio: 0.24
   ambiguous_owner_margin_ratio: 0.025
-
 alert:
   separation_seconds: 2.0
   stationary_window_seconds: 1.0
   stationary_max_movement_ratio: 0.035
   min_stationary_observations: 3
-
 cameras:
-  - id: demo_fake
-    enabled: true
-    source:
-      kind: fake
-    sampling:
-      queue_size: 3
-      process_every_n_frames: 1
-      drop_policy: drop_oldest
-
-  - id: sample_mp4
-    enabled: false
-    source:
-      kind: mp4
-      uri: data/videos/sample.mp4
-
-  - id: gate_camera
-    enabled: false
-    source:
-      kind: rtsp
-      secret_env: CAMERA_GATE_RTSP_URL
-    reconnect:
-      initial_seconds: 1.0
-      maximum_seconds: 30.0
-      multiplier: 2.0
-      jitter_seconds: 0.25
+- id: '5'
+  enabled: true
+  source:
+    kind: rtsp
+    uri: rtsp://rtsp.rtsplink.com/live/people?token=dfe5d48a66475227eb5a379213dfd10bd82ba6e6f0f86ff23eb2baacefd7a55f
+  sampling:
+    queue_size: 5
+    process_every_n_frames: 9
+    target_fps: null
+    drop_policy: drop_oldest
+  reconnect:
+    initial_seconds: 1
+    maximum_seconds: 30
+    multiplier: 2
+    jitter_seconds: 0.25
+    jitter_fraction: 0.2

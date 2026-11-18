@@ -32,7 +32,7 @@ class CameraConfig:
     reconnect: ReconnectConfig = field(default_factory=ReconnectConfig)
 
 
-def _camera(raw: dict[str, Any]) -> CameraConfig:
+def camera_from_dict(raw: dict[str, Any]) -> CameraConfig:
     source = raw.get("source", {})
     sampling = raw.get("sampling", {})
     reconnect = raw.get("reconnect", {})
@@ -55,7 +55,43 @@ def _camera(raw: dict[str, Any]) -> CameraConfig:
 def load_runtime_config(path: str | Path) -> tuple[dict[str, Any], list[CameraConfig]]:
     import yaml
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
-    return data, [_camera(item) for item in data.get("cameras", [])]
+    return data, [camera_from_dict(item) for item in data.get("cameras", [])]
+
+
+def camera_to_dict(camera: CameraConfig) -> dict[str, Any]:
+    source = {"kind": camera.source_kind}
+    if camera.secret_env:
+        source["secret_env"] = camera.secret_env
+    elif camera.source_uri:
+        source["uri"] = camera.source_uri
+    return {
+        "id": camera.id,
+        "enabled": camera.enabled,
+        "source": source,
+        "sampling": {
+            "queue_size": camera.sampling.queue_size,
+            "process_every_n_frames": camera.sampling.process_every_n_frames,
+            "target_fps": camera.sampling.target_fps,
+            "drop_policy": camera.sampling.drop_policy,
+        },
+        "reconnect": {
+            "initial_seconds": camera.reconnect.initial_seconds,
+            "maximum_seconds": camera.reconnect.maximum_seconds,
+            "multiplier": camera.reconnect.multiplier,
+            "jitter_seconds": camera.reconnect.jitter_seconds,
+            "jitter_fraction": camera.reconnect.jitter_fraction,
+        },
+    }
+
+
+def write_runtime_cameras(path: str | Path, cameras: list[CameraConfig]) -> None:
+    import yaml
+    target = Path(path)
+    data = yaml.safe_load(target.read_text(encoding="utf-8")) or {}
+    data["cameras"] = [camera_to_dict(camera) for camera in cameras]
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    temporary.replace(target)
 
 
 def resolve_secret(camera: CameraConfig) -> str | None:
