@@ -1,0 +1,8 @@
+$ErrorActionPreference = "Stop"
+Write-Output "Python: $(python --version 2>&1)"
+Write-Output "Docker: $(if (Get-Command docker -ErrorAction SilentlyContinue) { 'available' } else { 'missing' })"
+Write-Output "Sample MP4: $(Test-Path '.\data\videos\sample.mp4')"
+Write-Output "Backend: $(Test-Path '.\backend')"
+Write-Output "Frontend: $(Test-Path '.\frontend')"
+Write-Output "Phase 9: $(Test-Path '.\docs\phase-checkpoints\phase-09.md')"
+Write-Output "Design doc: $(Test-Path '.\docs\design.md')"

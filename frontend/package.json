@@ -1,6 +1,6 @@
 {
   "private": true,
-  "scripts": {"dev": "vite", "build": "vite build", "test": "vitest run"},
+  "scripts": {"dev": "vite", "build": "vite build", "test": "vitest run --pool=threads --no-file-parallelism"},
   "dependencies": {"@vitejs/plugin-react": "latest", "vite": "latest", "vitest": "latest", "react": "latest", "react-dom": "latest"},
   "devDependencies": {}
 }

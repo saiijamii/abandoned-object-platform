@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import copy
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -79,12 +80,7 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
         if not config_path or not Path(config_path).is_file():
             return {}
         import yaml
-        value = yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {}
-        for camera in value.get("cameras", []):
-            source = camera.get("source", {})
-            if source.get("secret_env"):
-                source.pop("uri", None)
-        return value
+        return _public_config(yaml.safe_load(Path(config_path).read_text(encoding="utf-8")) or {})
 
     @app.put("/api/config")
     def update_config(value: dict) -> dict:
@@ -95,15 +91,33 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
         current = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         for key in ("runtime", "ownership", "alerts", "alert"):
             if key in value:
+                _validate_settings(key, value[key])
                 current[key] = value[key]
+        configured = {camera.get("id"): camera for camera in current.get("cameras", [])}
         for camera in value.get("cameras", []):
+            if camera.get("id") not in configured:
+                raise HTTPException(status_code=400, detail=f"unknown camera: {camera.get('id')}")
             source = camera.get("source", {})
             if source.get("uri") or source.get("password"):
                 raise HTTPException(status_code=400, detail="source secrets must use secret_env")
+            _validate_camera_settings(camera)
+            if "enabled" in camera:
+                camera["enabled"] = bool(camera["enabled"])
+            if "sampling" in camera:
+                camera["sampling"] = {**camera["sampling"]}
+                for key in ("queue_size", "process_every_n_frames"):
+                    if key in camera["sampling"]:
+                        camera["sampling"][key] = int(camera["sampling"][key])
+            target = configured[camera["id"]]
+            for key in ("enabled", "sampling", "reconnect"):
+                if key in camera:
+                    target[key] = camera[key]
+            if manager and hasattr(manager, "update_camera"):
+                manager.update_camera(camera["id"], {key: camera[key] for key in ("enabled", "sampling") if key in camera})
         temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_text(yaml.safe_dump(current, sort_keys=False), encoding="utf-8")
         temporary.replace(path)
-        return current
+        return _public_config(current)
 
     @app.get("/api/tracks/{camera_id}/{session_id}")
     def camera_tracks(camera_id: str, session_id: str) -> dict:
@@ -202,6 +216,51 @@ def create_app(storage_root: str | Path = "storage", manager: CameraManager | No
         return "\n".join(lines) + "\n"
 
     return app
+
+
+def _validate_settings(section: str, value: dict) -> None:
+    if not isinstance(value, dict):
+        raise HTTPException(status_code=400, detail=f"{section} must be an object")
+    numeric = {
+        "runtime": {"max_continuity_gap_seconds"},
+        "ownership": {"association_seconds", "association_max_distance_ratio", "separation_distance_ratio", "ambiguous_owner_margin_ratio"},
+        "alerts": {"separation_seconds", "stationary_window_seconds", "stationary_max_movement_ratio", "min_stationary_observations"},
+        "alert": {"separation_seconds", "stationary_window_seconds", "stationary_max_movement_ratio", "min_stationary_observations"},
+    }[section]
+    for key in numeric:
+        if key in value:
+            try:
+                if float(value[key]) < 0:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"{section}.{key} must be non-negative")
+
+
+def _validate_camera_settings(camera: dict) -> None:
+    sampling = camera.get("sampling", {})
+    if not isinstance(sampling, dict):
+        raise HTTPException(status_code=400, detail="camera sampling must be an object")
+    for key in ("queue_size", "process_every_n_frames"):
+        if key in sampling:
+            try:
+                if int(sampling[key]) < 1:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"camera sampling {key} must be positive")
+    if "drop_policy" in sampling and sampling["drop_policy"] not in {"drop_oldest", "drop_newest"}:
+        raise HTTPException(status_code=400, detail="camera sampling drop_policy is invalid")
+
+
+def _public_config(value: dict) -> dict:
+    public = copy.deepcopy(value)
+    for camera in public.get("cameras", []):
+        source = camera.get("source", {})
+        source.pop("password", None)
+        if source.get("secret_env"):
+            source.pop("uri", None)
+        elif source.get("uri"):
+            source["uri"] = redact_uri(source["uri"])
+    return public
 
 
 app = create_app()
